@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: neuroguard-backend
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -w 4 -k uvicorn.workers.UvicornWorker app.app:app
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: PYTHONPATH
+        value: .
+      - key: SEGMENTATION_WEIGHTS
+        value: unet_trained.pth
