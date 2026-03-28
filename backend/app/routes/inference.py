@@ -94,6 +94,24 @@ def create_overlay(original: np.ndarray, mask: np.ndarray) -> bytes:
     return buffer.tobytes()
 
 
+# -------------------------
+# MASK COLORIZATION UTIL
+# -------------------------
+def _mask_to_color_image(mask: np.ndarray) -> np.ndarray:
+    """
+    Converts a 3-channel (WT, TC, ET) ROI mask into a clinical color-coded PNG buffer.
+    WT: Green (Emerald)
+    TC: Yellow (Non-enhancing)
+    ET: Red (Active region)
+    """
+    mask_rgb = np.zeros((128, 128, 3), dtype=np.uint8)
+    # OpenCV uses BGR for imencode
+    mask_rgb[mask[0] > 0.5] = [0, 255, 0]   # WT: Green
+    mask_rgb[mask[1] > 0.5] = [0, 255, 255] # TC: Yellow
+    mask_rgb[mask[2] > 0.5] = [0, 0, 255]   # ET: Red
+    return mask_rgb
+
+
 def _simulate_multimodal(gray_norm: np.ndarray) -> torch.Tensor:
     """
     Simulates BraTS 4-channel input (T1, T1ce, T2, FLAIR) from a single grayscale image.
@@ -257,21 +275,17 @@ async def segment(upload_id: str | None = Form(None)):
     gray_norm = apply_augmentation_pipeline(gray_norm)
 
     mask = _postprocess_mask(_segment_mask(gray_norm))
-
-    # For display, we can send a combined base64 or multiple. 
-    # Let's send a colorized mask base64 (RGB) and the overlay.
-    mask_rgb = np.zeros((128, 128, 3), dtype=np.uint8)
-    mask_rgb[mask[0] > 0.5] = [0, 255, 0]   # WT
-    mask_rgb[mask[1] > 0.5] = [0, 255, 255] # TC
-    mask_rgb[mask[2] > 0.5] = [0, 0, 255]   # ET
     
+    # 🎨 Colorized Binary Mask (WT/TC/ET)
+    mask_rgb = _mask_to_color_image(mask)
     _, mask_buffer = cv2.imencode(".png", mask_rgb)
     mask_b64 = bytes_to_base64(mask_buffer.tobytes())
 
+    # 🖼️ Overlay Display
     overlay_bytes = create_overlay(img_bgr, mask)
     overlay_b64 = bytes_to_base64(overlay_bytes)
 
-    # Convert original to base64 for display
+    # 📄 Original Grayscale Reference
     _, original_buffer = cv2.imencode(".png", cv2.resize(img_bgr, (128, 128)))
     original_b64 = bytes_to_base64(original_buffer.tobytes())
 
@@ -322,7 +336,10 @@ async def test_dataset(index: int = Form(0)):
     mask = _postprocess_mask(_segment_mask(gray_norm))
     prob, days = _survival_predict(gray_norm, mask)
 
-    mask_b64 = bytes_to_base64(mask_to_png_bytes(mask))
+    # 🎨 Fix: Use unified colorized mask generation
+    mask_rgb = _mask_to_color_image(mask)
+    _, mask_buffer = cv2.imencode(".png", mask_rgb)
+    mask_b64 = bytes_to_base64(mask_buffer.tobytes())
     
     # Original image base64
     img_bgr = cv2.imread(str(image_path))
