@@ -31,6 +31,17 @@ def create_app() -> FastAPI:
 
     api.include_router(health_router)
     api.include_router(inference_router)
+
+    @api.get("/")
+    async def root():
+        return {
+            "status": "online",
+            "message": "NeuroGuard AI: Brain Tumor MRI Analysis Backend",
+            "version": "1.0.0",
+            "environment": "production",
+            "docs": "/docs"
+        }
+
     return api
 
 
